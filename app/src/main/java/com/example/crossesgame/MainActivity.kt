@@ -1,5 +1,6 @@
 package com.example.crossesgame
 
+import android.content.Context
 import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
@@ -22,6 +23,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
@@ -33,6 +35,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
+import com.example.crossesgame.helpers.PreferencesHelper
 import com.example.crossesgame.ui.theme.CrossesGameTheme
 
 class MainActivity : ComponentActivity() {
@@ -40,25 +43,56 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContent {
             CrossesGameTheme {
-                // A surface container using the 'background' color from the theme
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    GameGrid(gridSize = 5)
+                    GlobalGameLoop(context = this) // Pass the Activity's context
                 }
             }
         }
     }
 }
 
+
 enum class GameState {
     Playing,
     Ended
 }
 
+
 @Composable
-fun GameGrid(gridSize: Int) {
+fun GlobalGameLoop(context: Context) {
+    // Track the current grid size (level progression)
+    val gridSize = remember { mutableStateOf(PreferencesHelper.load(context, "grid_size_key", 1)) }
+    val level = remember { mutableStateOf(PreferencesHelper.load(context, "level_key", 1)) }
+
+    androidx.compose.runtime.key(gridSize.value, level.value) {
+        GameGrid(
+            gridSize = gridSize.value,
+            level = level.value,
+            onLevelEnd = {
+                increaseLevel(level, gridSize)
+                PreferencesHelper.save(context, "level_key", level.value)
+                PreferencesHelper.save(context, "grid_size_key", gridSize.value)
+            }
+        )
+    }
+}
+
+fun increaseLevel(level: MutableState<Int>, gridSize: MutableState<Int>) {
+    level.value += 1
+    if (level.value > gridSize.value * gridSize.value) {
+        gridSize.value += 1
+        level.value = 1
+    }
+}
+
+
+@Composable
+fun GameGrid(gridSize: Int, level: Int, onLevelEnd: () -> Unit) {
+    Log.d("MainActivity", "Grid Size: $gridSize")
+    Log.d("MainActivity", "Level: $level")
     // Get the screen dimensions
     val configuration = LocalConfiguration.current
     val screenWidth = configuration.screenWidthDp.dp
@@ -78,14 +112,19 @@ fun GameGrid(gridSize: Int) {
             },
             restore = { flatList: List<Boolean> ->
                 flatList.chunked(gridSize).map { row ->
-                    row.map { mutableStateOf(it) }.toMutableList() // Wrap Boolean values back into MutableState
+                    row.map { mutableStateOf(it) }
+                        .toMutableList() // Wrap Boolean values back into MutableState
                 }
             }
         )
     ) {
         List(gridSize) {
-            MutableList(gridSize) { mutableStateOf(false) } // Initialize grid with MutableState<Boolean>
+            MutableList(gridSize) { mutableStateOf(true) } // Initialize grid with MutableState<Boolean>
         }
+    }
+
+    if (gameState.value == GameState.Playing) {
+        shuffleGrid(grid, level)
     }
 
     // Center the grid and make it a square
@@ -94,7 +133,8 @@ fun GameGrid(gridSize: Int) {
             .fillMaxSize() // Fill the entire screen to center the grid
             .clickable { // Handle touch anywhere
                 if (gameState.value == GameState.Ended) {
-                    startNewGame(grid, gameState)
+                    onLevelEnd()
+//                    startNewGame(grid, gameState)
                 }
             },
         contentAlignment = Alignment.Center // Center the grid within the screen
@@ -119,7 +159,7 @@ fun GameGrid(gridSize: Int) {
                         repeat(gridSize) { col ->
                             Cell(
                                 value = grid[row][col].value,
-                                onClick = { processClick(grid, row, col, gameState) },
+                                onClick = { processClick(grid, row, col, gameState, onLevelEnd) },
                                 modifier = Modifier.weight(1f) // Ensures cells are equally sized
                             )
                         }
@@ -145,23 +185,42 @@ fun GameGrid(gridSize: Int) {
     }
 }
 
-fun startNewGame(grid: List<MutableList<MutableState<Boolean>>>, gameState: MutableState<GameState>) {
-    Log.d("MainActivity", "Starting new game!")
-    resetGrid(grid)
-    gameState.value = GameState.Playing
-}
+fun shuffleGrid(grid: List<MutableList<MutableState<Boolean>>>, steps: Int) {
+    Log.d("MainActivity", "Shuffling grid")
+    Log.d("MainActivity", "steps: $steps")
+    // Ensure grid starts as all inactive (false)
+    while (grid.all { row -> row.all { it.value } }) {
+        val cellSet = mutableSetOf<Pair<Int, Int>>()
+        val gridSize = grid.size
 
-fun resetGrid(grid: List<MutableList<MutableState<Boolean>>>) {
-    grid.forEach { row ->
-        row.forEach { cell ->
-            cell.value = false
+        repeat(steps) {
+            var cellX = (0 until gridSize).random()
+            var cellY = (0 until gridSize).random()
+            Log.d("MainActivity", "Shuffling cell: $cellX, $cellY")
+
+            // Ensure the cell is not already toggled in this shuffle iteration
+            while (cellSet.contains(cellX to cellY)) {
+                cellX = (0 until gridSize).random()
+                cellY = (0 until gridSize).random()
+            }
+
+            toggleCellState(grid, cellX, cellY) // Call toggle function
+            cellSet.add(cellX to cellY)
         }
     }
+    Log.d("MainActivity", "Grid shuffled")
 }
 
-fun processClick(grid: List<MutableList<MutableState<Boolean>>>, row: Int, col: Int, gameState: MutableState<GameState>) {
+fun processClick(
+    grid: List<MutableList<MutableState<Boolean>>>,
+    row: Int,
+    col: Int,
+    gameState: MutableState<GameState>,
+    onLevelEnd: () -> Unit
+) {
     if (gameState.value == GameState.Ended) {
-        startNewGame(grid, gameState)
+        onLevelEnd()
+//        startNewGame(grid, gameState)
         return
     }
     toggleCellState(grid, row, col)
