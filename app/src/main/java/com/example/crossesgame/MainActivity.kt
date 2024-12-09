@@ -1,15 +1,17 @@
 package com.example.crossesgame
 
 import android.content.Context
+import android.os.Build
 import android.os.Bundle
 import android.util.Log
+import android.view.View
+import android.view.WindowInsets
+import android.view.WindowInsetsController
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -17,7 +19,6 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
@@ -41,6 +42,7 @@ import com.example.crossesgame.ui.theme.CrossesGameTheme
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
         setContent {
             CrossesGameTheme {
                 Surface(
@@ -50,6 +52,30 @@ class MainActivity : ComponentActivity() {
                     GlobalGameLoop(context = this) // Pass the Activity's context
                 }
             }
+        }
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) {
+            enableFullscreenMode()
+        }
+    }
+
+    private fun enableFullscreenMode() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            window.insetsController?.let { controller ->
+                controller.hide(WindowInsets.Type.statusBars() or WindowInsets.Type.navigationBars())
+                controller.systemBarsBehavior =
+                    WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            }
+        } else {
+            @Suppress("DEPRECATION")
+            window.decorView.systemUiVisibility = (
+                    View.SYSTEM_UI_FLAG_FULLSCREEN
+                            or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                            or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                    )
         }
     }
 }
@@ -139,14 +165,20 @@ fun GameGrid(gridSize: Int, level: Int, onLevelEnd: () -> Unit) {
             },
         contentAlignment = Alignment.Center // Center the grid within the screen
     ) {
+        Image(
+            painter = painterResource(id = R.drawable.background), // Replace with your background image resource
+            contentDescription = null,
+            modifier = Modifier.fillMaxSize(),
+            contentScale = ContentScale.Crop // Scale to cover the entire screen
+        )
         // Square grid container
         Box(
             modifier = Modifier
-                .size(gridSizeDp * 0.9f) // Slightly reduce size to add margins (90% of the smaller dimension)
+                .size(gridSizeDp * 0.95f) // Slightly reduce size to add margins (90% of the smaller dimension)
         ) {
             Column(
                 modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(4.dp), // Space between rows
+//                verticalArrangement = Arrangement.spacedBy(4.dp), // Space between rows
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 repeat(gridSize) { row ->
@@ -154,7 +186,7 @@ fun GameGrid(gridSize: Int, level: Int, onLevelEnd: () -> Unit) {
                         modifier = Modifier
                             .fillMaxWidth()
                             .weight(1f), // Makes all rows take equal vertical space
-                        horizontalArrangement = Arrangement.spacedBy(4.dp) // Space between cells in each row
+//                        horizontalArrangement = Arrangement.spacedBy(4.dp) // Space between cells in each row
                     ) {
                         repeat(gridSize) { col ->
                             Cell(
@@ -257,10 +289,10 @@ fun Cell(value: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
     Box(
         modifier = modifier
             .aspectRatio(1f) // Makes the cell square
-            .background(
-                color = Color.LightGray,
-                shape = RoundedCornerShape(8.dp)
-            )
+//            .background(
+//                color = Color.LightGray,
+//                shape = RoundedCornerShape(8.dp)
+//            )
             .clickable { onClick() },
         contentAlignment = Alignment.Center
     ) {
